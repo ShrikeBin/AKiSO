@@ -12,9 +12,13 @@ void resetColor()
 
 int main()
 {
+	int limit = 0;
 	const char* ms = "Hello World!";
+	
+	printf("Limit:\n");
+	scanf("%d", &limit);
 
-	for(int i = 0; i <8; ++i)
+	for(int i = 0; i <limit +1; ++i)
 	{
 		setColor(i);
 		printf("%s\n",ms);
