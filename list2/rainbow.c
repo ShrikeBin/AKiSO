@@ -2,12 +2,12 @@
 
 void setColor(int color)
 {
-	printf("\033[03%dm", color);
+	printf("\033[38;5;%dm", color);
 }
 
 void resetColor()
 {
-	printf("\033[0m");
+	printf("\033[0;0m");
 }
 
 int main()
