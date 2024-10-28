@@ -27,6 +27,15 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
         error("Opening output file failed");
     }
 
+
+
+//maybe i need to execute open() in the opened process to create a new descriptor for him? how to inject all of that code into the attached process???
+
+
+
+
+    
+
     // Attach to the target process
     if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) 
     {
