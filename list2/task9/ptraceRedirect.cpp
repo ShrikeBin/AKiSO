@@ -44,34 +44,12 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
     if (ptrace(PTRACE_GETREGS, pid, nullptr, &regs) < 0) 
     {
         error("ptrace getregs failed");
-    }
-        // Output for debugging purposes
-        std::cout << "Registers got:\n"
-              << "RAX: " << regs.rax << "\n"
-              << "RBX: " << regs.rbx << "\n"
-              << "RCX: " << regs.rcx << "\n"
-              << "RDX: " << regs.rdx << "\n"
-              << "RSI: " << regs.rsi << "\n"
-              << "RDI: " << regs.rdi << "\n"
-              << "RBP: " << regs.rbp << "\n"
-              << "RSP: " << regs.rsp << "\n"
-              << "R8 : " << regs.r8 << "\n"
-              << "R9 : " << regs.r9 << "\n"
-              << "R10: " << regs.r10 << "\n"
-              << "R11: " << regs.r11 << "\n"
-              << "R12: " << regs.r12 << "\n"
-              << "R13: " << regs.r13 << "\n"
-              << "R14: " << regs.r14 << "\n"
-              << "R15: " << regs.r15 << "\n"
-              << "RIP: " << regs.rip << "\n"
-              << "ORIG RAX: " << regs.orig_rax << "\n"
-              << "EFLAGS: " << regs.eflags << std::endl;
+    }   
 
     // Prepare for dup2 syscall
     long orig_rax = regs.orig_rax;   // Save the original syscall number
-    regs.orig_rax = SYS_dup2;        // Change syscall to dup2
-    regs.rdi = new_fd;               // Set the new file descriptor
-    regs.rsi = STDOUT_FILENO;        // Redirect stdout (file descriptor 1)
+    regs.orig_rax = SYS_close;        // Change syscall to dup2
+    regs.rdi = 1;//old_fd;
 
     // Set modified registers
     if (ptrace(PTRACE_SETREGS, pid, nullptr, &regs) < 0) 
@@ -79,33 +57,7 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
         error("ptrace setregs failed");
     }
 
-    if (ptrace(PTRACE_GETREGS, pid, nullptr, &regs) < 0) 
-    {
-        error("ptrace getregs failed");
-    }
-        // Output for debugging purposes
-        std::cout << "Registers got after set:\n"
-              << "RAX: " << regs.rax << "\n"
-              << "RBX: " << regs.rbx << "\n"
-              << "RCX: " << regs.rcx << "\n"
-              << "RDX: " << regs.rdx << "\n"
-              << "RSI: " << regs.rsi << "\n"
-              << "RDI: " << regs.rdi << "\n"
-              << "RBP: " << regs.rbp << "\n"
-              << "RSP: " << regs.rsp << "\n"
-              << "R8 : " << regs.r8 << "\n"
-              << "R9 : " << regs.r9 << "\n"
-              << "R10: " << regs.r10 << "\n"
-              << "R11: " << regs.r11 << "\n"
-              << "R12: " << regs.r12 << "\n"
-              << "R13: " << regs.r13 << "\n"
-              << "R14: " << regs.r14 << "\n"
-              << "R15: " << regs.r15 << "\n"
-              << "RIP: " << regs.rip << "\n"
-              << "ORIG RAX: " << regs.orig_rax << "\n"
-              << "EFLAGS: " << regs.eflags << std::endl;
-
-    // Allow the process to execute the dup2 syscall
+    // Allow the process to execute the close syscall
     if (ptrace(PTRACE_SYSCALL, pid, nullptr, nullptr) < 0) 
     {
         error("ptrace syscall failed");
@@ -117,10 +69,26 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
         error("waitpid after syscall failed");
     }
 
-    // Check if dup2 was successful
+    // Get regs again
     if (ptrace(PTRACE_GETREGS, pid, nullptr, &regs) < 0) 
     {
         error("ptrace getregs after syscall failed");
+    }
+
+    regs.orig_rax = SYS_dup2;        // Set to execute dup2
+    regs.rdi = new_fd;               // Set the new file descriptor
+    regs.rsi = 1;//old_fd; 
+
+    // Set modified registers
+    if (ptrace(PTRACE_SETREGS, pid, nullptr, &regs) < 0) 
+    {
+        error("ptrace setregs failed");
+    }
+
+    // Allow the process to execute the dup2 syscall
+    if (ptrace(PTRACE_SYSCALL, pid, nullptr, nullptr) < 0) 
+    {
+        error("ptrace syscall failed");
     }
 
     if (regs.rax < 0) 
@@ -134,6 +102,7 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
 
     // Restore the original syscall number
     regs.orig_rax = orig_rax;
+
     if (ptrace(PTRACE_SETREGS, pid, nullptr, &regs) < 0) 
     {
         error("ptrace reset regs failed");
