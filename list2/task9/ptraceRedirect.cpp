@@ -58,7 +58,7 @@ void redirect_stdout(pid_t pid, const std::string &new_file)
     // Prepare for dup2 syscall
     long orig_rax = regs.orig_rax;   // Save the original syscall number
     regs.orig_rax = SYS_close;        // Change syscall to dup2
-    regs.rdi = 1;//old_fd;
+    regs.rdi = 1; //old_fd;
 
     // Set modified registers
     if (ptrace(PTRACE_SETREGS, pid, nullptr, &regs) < 0) 
