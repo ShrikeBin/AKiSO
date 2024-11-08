@@ -9,7 +9,7 @@
         
         if [[ -r /proc/$pid/status && -r /proc/$pid/stat && -r /proc/$pid/fd ]]; then
             
-            ppid=$(awk '/^PPid:/ {print $2}' /proc/$pid/status)
+            ppid=$(awk '/^PPid:/ {print $2}' /proc/$pid/status) # in awk look for line starting (^) with string PPid: and print second after whitespace ($2)
             comm=$(awk '/^Name:/ {print $2}' /proc/$pid/status)
             state=$(awk '/^State:/ {print $2}' /proc/$pid/status)
             rss=$(awk '/^VmRSS:/ {print $2}' /proc/$pid/status)
