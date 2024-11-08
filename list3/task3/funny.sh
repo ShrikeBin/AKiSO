@@ -9,14 +9,8 @@ if [[ -z "$cat_image_url" ]]; then
     exit 1
 fi
 
-temp_image=$(mktemp /tmp/cat_image.XXXXXX)
-
-curl -s "$cat_image_url" -o "$temp_image"
-
-catimg "$temp_image"
+curl -s "$cat_image_url" | catimg -
 
 quote=$(curl -s https://api.chucknorris.io/jokes/random | jq -r '.value')
 
 echo -e "\n$quote"
-
-rm -f "$temp_image"
