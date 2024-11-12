@@ -1,6 +1,6 @@
 #!/bin/bash
 
-readable_bytes() 
+convert_bytes() 
 {
     local size=$1
     if (( size < 1024 )); then
@@ -16,6 +16,7 @@ readable_bytes()
 
 cpu_info() 
 {
+    (
     while read -r line; do
         if [[ "$line" =~ ^cpu[0-9]+ ]]; then
 
@@ -48,9 +49,10 @@ cpu_info()
                 freq=0 
             fi
 
-            echo -e "CPU $cpu_id | Usage: $percent% | Frequency: ${freq}MHz"
+            echo -e "\tCPU $cpu_id \t| \tUsage: $percent% \t| \tFrequency: ${freq}MHz"
         fi
     done < /proc/stat
+    ) | column -t -s $'\t' 
 }
 
 memory_info() 
@@ -68,49 +70,28 @@ memory_info()
     echo -e "Memory Usage: $mem_used_gb GB / $mem_total_gb GB"
 }
 
-network_info() 
+network_measure()
 {
-    # Take the topmost interface
     interface=$(awk 'NR>2 {print $1, $2}' /proc/net/dev | sort -k2 -n | tail -n 1 | awk '{gsub(":", "", $1); print $1}')
     
-    # Check if the interface exists in /proc/net/dev
     if ! grep -qw "$interface" /proc/net/dev; then
         echo "Interface $interface not found!"
         return 1
     fi
 
-    #substitute : to "" (for some reason it doesnt work other way)
-    rx_prev=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $2}' /proc/net/dev)
-    tx_prev=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $10}' /proc/net/dev)
+    recieve_prev=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $2}' /proc/net/dev)
+    transfer_prev=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $10}' /proc/net/dev)
     
     sleep 1
-    
-    # Read the current
-    rx_curr=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $2}' /proc/net/dev)
-    tx_curr=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $10}' /proc/net/dev)
 
-    rx_speed=$((rx_curr - rx_prev))
-    tx_speed=$((tx_curr - tx_prev))
+    recieve_curr=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $2}' /proc/net/dev)
+    transfer_curr=$(awk -v iface="$interface" '{gsub(":", "", $1); if ($1 == iface) print $10}' /proc/net/dev)
 
-    rx_speed_hr=$(readable_bytes $rx_speed)
-    tx_speed_hr=$(readable_bytes $tx_speed)
+    recieve_speed=$((recieve_curr - recieve_prev))
+    transfer_speed=$((transfer_curr - transfer_prev))
 
-    max_bar_length=50
-    max_speed=10000000
-
-    # Scale the bar length based on the current speed (scaled to max_bar_length)
-    rx_bar_length=$((rx_speed * max_bar_length / max_speed))
-    tx_bar_length=$((tx_speed * max_bar_length / max_speed))
-
-    # Generate the bars (scaled with a limit)
-    rx_bar=$(printf "%-${rx_bar_length}s" | tr ' ' '#')
-    tx_bar=$(printf "%-${tx_bar_length}s" | tr ' ' '#')
-
-    echo -e "Network - IN Speed: $rx_speed_hr $rx_bar"
-    echo -e "Network - OUT Speed: $tx_speed_hr $tx_bar"
+    echo "$recieve_speed $transfer_speed"
 }
-
-
 
 uptime_info() 
 {   
@@ -144,17 +125,78 @@ loadavg_info()
     echo -e "Load Average (last 1, 5, 15 min): $loadavg"
 }
 
+draw_graph()
+{
+    local values=("${@:2}")
+
+    local max_value=0
+    for value in "${values[@]}"; do
+        if (( value > max_value )); then
+            max_value=$value
+        fi
+    done
+
+    local max_height=5
+
+    if(( max_value > 0 )); then
+        for (( level=$max_height; level>0; level-- )); do
+            for value in "${values[@]}"; do
+                if (( (value * max_height) / max_value + 1 > level )); then
+                    printf "#"
+                else
+                    printf " "
+                fi
+            done
+            echo
+        done
+    else
+        for (( level=$max_height; level>0; level-- )); do
+            echo
+        done
+    fi
+
+    for value in "${values[@]}"; do
+        printf "_"
+    done
+    echo
+}
+
+rx_values=()
+tx_values=()
+for i in {1..57}; do
+    rx_values+=(0)
+    tx_values+=(0)
+done
 
 while true; do
+    read rx tx <<< "$(network_measure)"
+    rx_values+=($rx) && unset rx_values[0] && rx_values=("${rx_values[@]}")
+    tx_values+=($tx) && unset tx_values[0] && tx_values=("${tx_values[@]}")
 
     clear 
 
-    cpu_info
-    memory_info
-    uptime_info
-    battery_info
-    loadavg_info
-    network_info
+    recieve_speed=$(convert_bytes $rx)
+    echo -e "Network Receive Speed: $recieve_speed"
+    draw_graph "Network_Receive: ${rx_values[@]}"
 
-    sleep 1
+    transfer_speed=$(convert_bytes $tx)
+    echo -e "Network Transfer Speed: $transfer_speed"
+    draw_graph "Network_Transfer: ${tx_values[@]}"
+
+    echo -e "$(printf '_'%.0s {0..55})"
+    echo
+    uptime_info
+    echo
+    loadavg_info
+    echo
+    battery_info
+    echo
+    memory_info
+    echo -e "$(printf '_'%.0s {0..55})"
+    echo -e "$(printf '_'%.0s {0..55})"
+    echo
+    cpu_info
+    echo -e "$(printf '_'%.0s {0..55})"
+    echo -e "$(printf '_'%.0s {0..55})"
+
 done
