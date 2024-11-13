@@ -1,6 +1,5 @@
 #include "types.h"
 #include "user.h"
-#include "stdlib.h"
 
 int main(int argc, char *argv[]) 
 {
