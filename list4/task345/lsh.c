@@ -11,17 +11,142 @@
 #define MAX_INPUT_SIZE 1024
 #define MAX_ARGS 128
 
-// Flaga określająca czy użytkownik nacisnął Ctrl-C
-volatile sig_atomic_t ctrl_c_pressed = 0;
+typedef struct Job 
+{
+    pid_t pid;
+    char command[MAX_INPUT_SIZE];
+    int is_running; // 1 = running, 0 = stopped
+} Job;
 
-// Funkcja obsługi sygnału SIGINT (Ctrl-C)
+Job jobs[MAX_ARGS];
+int job_count = 0;
+volatile sig_atomic_t ctrl_c_pressed = 0;
+volatile sig_atomic_t ctrl_z_pressed = 0;
+
+volatile pid_t foreground_pid = -1;  // pid of foreground
+
+
+void add_job(pid_t pid, char *command, int running) 
+{
+    jobs[job_count].pid = pid;
+    char proc_file[256];
+    snprintf(proc_file, sizeof(proc_file), "/proc/%d/comm", pid);
+
+    FILE *fp = fopen(proc_file, "r");
+    if (fp != NULL) 
+    {
+        // Zczytaj nazwę procesu
+        if (fgets(jobs[job_count].command, MAX_INPUT_SIZE, fp) != NULL) 
+        {
+            // Usuwamy ewentualny znak nowej linii na końcu
+            jobs[job_count].command[strcspn(jobs[job_count].command, "\n")] = 0;
+        }
+        fclose(fp);
+    }
+    else 
+    {
+        // Jeśli nie udało się otworzyć pliku, użyj "Unknown"
+        strncpy(jobs[job_count].command, "Unknown", MAX_INPUT_SIZE);
+    }
+
+    if (command != NULL) 
+    {
+        strncat(jobs[job_count].command, " - ", MAX_INPUT_SIZE - strlen(jobs[job_count].command) - 1);
+        strncat(jobs[job_count].command, command, MAX_INPUT_SIZE - strlen(jobs[job_count].command) - 1);
+    }
+
+    jobs[job_count].is_running = running;  // Oznaczamy, że proces jest w tle i działa
+    job_count++;
+}
+
+void remove_job(pid_t pid) 
+{
+    for (int i = 0; i < job_count; i++) 
+    {
+        if (jobs[i].pid == pid) 
+        {
+            for (int j = i; j < job_count - 1; j++) 
+            {
+                jobs[j] = jobs[j + 1];
+            }
+            job_count--;
+            return;
+        }
+    }
+}
+
+void update_job_status(pid_t pid, int is_running) 
+{
+    for (int i = 0; i < job_count; i++) 
+    {
+        if (jobs[i].pid == pid) 
+        {
+            jobs[i].is_running = is_running;
+            return;
+        }
+    }
+}
+
+void list_jobs() 
+{
+    for (int i = 0; i < job_count; i++) 
+    {
+        printf("[%d] %s %s\n", i + 1, jobs[i].is_running ? "Running: " : "Stopped: ", jobs[i].command);
+    }
+}
+
+
+
+void bg_job(int job_index) 
+{
+    if (job_index < 0 || job_index >= job_count) 
+    {
+        fprintf(stderr, "Invalid job index\n");
+        return;
+    }
+    kill(jobs[job_index].pid, SIGCONT);
+    jobs[job_index].is_running = 1;
+}
+
+void fg_job(int job_index) 
+{
+    if (job_index < 0 || job_index >= job_count) 
+    {
+        fprintf(stderr, "Invalid job index\n");
+        return;
+    }
+    pid_t pid = jobs[job_index].pid;
+    foreground_pid = pid;
+    kill(pid, SIGCONT);
+    jobs[job_index].is_running = 1;
+    waitpid(pid, NULL, 0);
+    remove_job(pid);
+}
+
 void handle_sigint(int sig) 
 {
-    ctrl_c_pressed = 1;
+    if (foreground_pid > 0) 
+    {
+        kill(foreground_pid, SIGINT); // kill fg process
+        //foreground_pid = -1;
+    }
+
     printf("\n");
 }
 
-// Funkcja zmieniająca katalog
+void handle_sigtstp(int sig) 
+{
+    if (foreground_pid > 0) 
+    {
+        kill(foreground_pid, SIGTSTP);
+        add_job(foreground_pid, "Moved to Background: ", 0);
+        //foreground_pid = -1;
+    }
+
+    printf("\n");
+}
+
+// "cd" function
 void lsh_cd(char **args) 
 {
     if (args[1] == NULL) 
@@ -37,30 +162,40 @@ void lsh_cd(char **args)
     }
 }
 
-// Funkcja kończąca powłokę
 void lsh_exit() 
 {
     exit(0);
 }
 
-// Funkcja obsługująca procesy w tle
 void handle_zombies() 
 {
     while (waitpid(-1, NULL, WNOHANG) > 0);
 }
 
-// Funkcja do obsługi potoków i przekierowań
-void execute_command(char **args) 
+// Main command recognition
+void execute_command(char **args)
 {
     int input_fd = -1; 
     int output_fd = -1;
     int error_fd = -1; 
     int pipe_fd[2];
     int has_pipe = 0;
+    int is_background = 0;
     char *pipe_args[MAX_ARGS];
     pid_t pid;
 
-    // Sprawdzenie, czy w komendzie znajduje się potok '|'
+    // check if "&"
+    for (int i = 0; args[i] != NULL; i++) 
+    {
+        if (strcmp(args[i], "&") == 0) 
+        {
+            args[i] = NULL;
+            is_background = 1;
+            break;
+        }
+    }
+
+    // check if '|'
     for (int i = 0; args[i] != NULL; i++) 
     {
         if (strcmp(args[i], "|") == 0) 
@@ -160,46 +295,55 @@ void execute_command(char **args)
         {
             perror("lsh");
         }
+
         exit(EXIT_FAILURE);
     } 
     else 
-    {
+    {   
         if (has_pipe) 
         {
             close(pipe_fd[1]);
 
             //fork again to handle the pipe as a parent
             pid_t pipe_pid = fork();
-
             if (pipe_pid == 0) 
-            { // Proces do obsługi drugiej komendy
-                dup2(pipe_fd[0], STDIN_FILENO);
-                close(pipe_fd[0]);
-
-                if (execvp(pipe_args[0], pipe_args) == -1) 
-                {
-                    perror("lsh");
-                }
-                exit(EXIT_FAILURE);
-            } 
-            else if (pipe_pid < 0) 
             {
-                perror("lsh");
+                dup2(pipe_fd[0], STDIN_FILENO);
+                execvp(pipe_args[0], pipe_args);
+                perror("execvp");
+                exit(EXIT_FAILURE);
+            }
+            close(pipe_fd[0]);
+
+            if (is_background) 
+            {
+                add_job(pipe_pid, pipe_args[0], 1);
+                printf("[%d] %d\n", job_count, pipe_pid);
             } 
             else 
             {
-                close(pipe_fd[0]);
-                waitpid(pipe_pid, NULL, 0); //wait for child 2
+                //wait for child 2
+                waitpid(pipe_pid, NULL, 0);
             }
         }
-        waitpid(pid, NULL, 0); //wait for child 1
+        if (is_background) 
+        {
+            add_job(pid, args[0], 1);
+            printf("[%d] %d\n", job_count, pid);
+        } 
+        else 
+        {
+            //wait for child 1
+            foreground_pid = pid;
+            waitpid(pid, NULL, 0);
+        }
     }
 }
 
 // Funkcja parsująca linię wejściową
-int lsh_parse_input(char *input, char **args, int *background) 
+int lsh_parse_input(char *input, char **args) 
 {
-    *background = 0;
+
     char *token = strtok(input, " \t\n");
     int i = 0;
 
@@ -207,12 +351,6 @@ int lsh_parse_input(char *input, char **args, int *background)
     {
         args[i++] = token;
         token = strtok(NULL, " \t\n");
-    }
-
-    if (i > 0 && strcmp(args[i - 1], "&") == 0) 
-    {
-        *background = 1;
-        args[--i] = NULL; // Usuń '&' z argumentów
     }
 
     args[i] = NULL;
@@ -224,7 +362,6 @@ void lsh_loop()
 {
     char input[MAX_INPUT_SIZE];
     char *args[MAX_ARGS];
-    int background;
 
     while (1) 
     {
@@ -241,7 +378,7 @@ void lsh_loop()
 
         if (strlen(input) == 1) continue; // Pusta linia
 
-        lsh_parse_input(input, args, &background);
+        lsh_parse_input(input, args);
 
         if (args[0] == NULL) continue; // Brak komendy
 
@@ -253,6 +390,18 @@ void lsh_loop()
         {
             lsh_exit();
         } 
+        else if (strcmp(args[0], "jobs") == 0) 
+        {
+            list_jobs();
+        } 
+        else if (strcmp(args[0], "bg") == 0) 
+        {
+            if (args[1] != NULL) bg_job(atoi(args[1]) - 1);
+        } 
+        else if (strcmp(args[0], "fg") == 0) 
+        {
+            if (args[1] != NULL) fg_job(atoi(args[1]) - 1);
+        } 
         else 
         {
             execute_command(args);
@@ -262,8 +411,14 @@ void lsh_loop()
 
 int main() 
 {
-    // Ustawienie obsługi Ctrl-C
-    signal(SIGINT, handle_sigint);
+
+    signal(SIGINT, handle_sigint);  // Set SIGINT handler
+    
+    struct sigaction sa_sigtstp;
+    sa_sigtstp.sa_handler = handle_sigtstp;
+    sa_sigtstp.sa_flags = 0;
+    sigemptyset(&sa_sigtstp.sa_mask);
+    sigaction(SIGTSTP, &sa_sigtstp, NULL);
 
     lsh_loop();
     return 0;
