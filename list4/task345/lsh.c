@@ -51,6 +51,7 @@ void add_job(pid_t pid, char *command, int running)
 
     if (command != NULL) 
     {
+        //dodaj komentarz do zczytanej nazwy
         strncat(jobs[job_count].command, " - ", MAX_INPUT_SIZE - strlen(jobs[job_count].command) - 1);
         strncat(jobs[job_count].command, command, MAX_INPUT_SIZE - strlen(jobs[job_count].command) - 1);
     }
@@ -94,8 +95,6 @@ void list_jobs()
         printf("[%d] %s %s\n", i + 1, jobs[i].is_running ? "Running: " : "Stopped: ", jobs[i].command);
     }
 }
-
-
 
 void bg_job(int job_index) 
 {
