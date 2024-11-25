@@ -128,10 +128,8 @@ void handle_sigint(int sig)
     if (foreground_pid > 0) 
     {
         kill(foreground_pid, SIGINT); // kill fg process
-        //foreground_pid = -1;
+        foreground_pid = -1;
     }
-
-    printf("\n");
 }
 
 void handle_sigtstp(int sig) 
@@ -140,10 +138,8 @@ void handle_sigtstp(int sig)
     {
         kill(foreground_pid, SIGTSTP);
         add_job(foreground_pid, "Moved to Background: ", 0);
-        //foreground_pid = -1;
+        foreground_pid = -1;
     }
-
-    printf("\n");
 }
 
 // "cd" function
@@ -402,7 +398,7 @@ void lsh_loop()
         {
             if (args[1] != NULL) fg_job(atoi(args[1]) - 1);
         } 
-        else 
+        else
         {
             execute_command(args);
         }
