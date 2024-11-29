@@ -20,8 +20,6 @@ typedef struct Job
 
 Job jobs[MAX_ARGS];
 int job_count = 0;
-volatile sig_atomic_t ctrl_c_pressed = 0;
-volatile sig_atomic_t ctrl_z_pressed = 0;
 
 volatile pid_t foreground_pid = -1;  // pid of foreground
 
@@ -259,6 +257,14 @@ void execute_command(char **args)
     }
     else if (pid == 0)
     {   
+        
+        if (has_pipe) 
+        {
+            close(pipe_fd[0]);
+            dup2(pipe_fd[1], STDOUT_FILENO);
+            close(pipe_fd[1]);
+        }
+        
         // redirect all descriptors and close the old ones
         if (input_fd != -1)
         {
@@ -266,7 +272,7 @@ void execute_command(char **args)
             close(input_fd);
         }
 
-        if (output_fd != -1) 
+        if (!has_pipe && output_fd != -1) 
         {
             dup2(output_fd, STDOUT_FILENO);
             close(output_fd);
@@ -276,13 +282,6 @@ void execute_command(char **args)
         {
             dup2(error_fd, STDERR_FILENO);
             close(error_fd);
-        }
-
-        if (has_pipe) 
-        {
-            close(pipe_fd[0]);
-            dup2(pipe_fd[1], STDOUT_FILENO);
-            close(pipe_fd[1]);
         }
 
         //execute execvp
