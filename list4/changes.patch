@@ -1,0 +1,104 @@
+diff --git a/Makefile b/Makefile
+index 09d790c..9b4c44c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -181,6 +183,7 @@ UPROGS=\
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_hello_test\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+@@ -250,7 +253,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
+ EXTRA=\
+ 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
+ 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
+-	printf.c umalloc.c\
++	printf.c umalloc.c hello_test.c\
+ 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
+ 	.gdbinit.tmpl gdbutil\
+ 
+diff --git a/syscall.c b/syscall.c
+index ee85261..6c4e073 100644
+--- a/syscall.c
++++ b/syscall.c
+@@ -103,6 +103,8 @@ extern int sys_unlink(void);
+ extern int sys_wait(void);
+ extern int sys_write(void);
+ extern int sys_uptime(void);
++extern int sys_hello(void);
++extern int sys_getppid(void);
+ 
+ static int (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+@@ -126,6 +128,8 @@ static int (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_hello] sys_hello,
++[SYS_getppid] sys_getppid,
+ };
+ 
+ void
+diff --git a/syscall.h b/syscall.h
+index bc5f356..b4278b2 100644
+--- a/syscall.h
++++ b/syscall.h
+@@ -20,3 +20,5 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_hello 22
++#define SYS_getppid 23
+\ No newline at end of file
+diff --git a/sysproc.c b/sysproc.c
+index 0686d29..918c5cf 100644
+--- a/sysproc.c
++++ b/sysproc.c
+@@ -42,6 +42,21 @@ sys_getpid(void)
+   return myproc()->pid;
+ }
+ 
++int
++sys_hello(void)
++{
++    cprintf("Hello World!\n");
++    return 0; // Zwraca 0 dla powodzenia
++}
++
++int
++sys_getppid(void)
++{
++    struct proc *curproc = myproc();
++    return curproc->parent->pid; // Zwraca PID rodzica
++}                                // struct proc ma parenta
++
++
+ int
+ sys_sbrk(void)
+ {
+diff --git a/user.h b/user.h
+index 4f99c52..c7ccb5c 100644
+--- a/user.h
++++ b/user.h
+@@ -23,6 +23,8 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int hello(void);
++int getppid(void);
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+diff --git a/usys.S b/usys.S
+index 8bfd8a1..378f95c 100644
+--- a/usys.S
++++ b/usys.S
+@@ -29,3 +29,5 @@ SYSCALL(getpid)
+ SYSCALL(sbrk)
+ SYSCALL(sleep)
+ SYSCALL(uptime)
++SYSCALL(hello)
++SYSCALL(getppid)
+\ No newline at end of file
