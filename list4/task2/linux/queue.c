@@ -14,28 +14,25 @@ void signal_handler(int signum)
 
 int main() 
 {
+    int pid = fork();
 
-    if (signal(SIGUSR1, signal_handler) == SIG_ERR) 
+    if (pid == 0) 
     {
-        perror("Unable to register SIGUSR1\n");
-        exit(1);
+        signal(10, signal_handler); // SIGUSR1
+        printf(1, "Child process PID: %d\n", getpid());
+        sleep(100);
+        printf(1, "Received %d signals.\n", signal_count);
+        exit();
     }
-
-    pid_t pid = getpid();
-    printf("PID of this process: %d\n", pid);
-
-    for (int i = 0; i < 20; i++) 
+    else 
     {
-        if (kill(pid, SIGUSR1) == -1) 
-        {
-            perror("Couldn't send signal\n");
+        sleep(10);
+        for (int i = 0; i < 10; i++) {
+            printf(1, "Sending signal %d to PID %d\n", 10, pid);
+            kill(pid, 10); // SIGUSR1
         }
+        wait(); // Czekaj na zakończenie procesu potomnego
     }
 
-    sleep(1);  // Wait to receive signals
-
-    // Check signals received (if more than 1 OS queue'd the signals)
-    printf("Number of received signals: %d\n", signal_count);
-
-    return 0;
+    exit();
 }
