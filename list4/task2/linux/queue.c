@@ -22,7 +22,7 @@ int main()
         printf(1, "Child process PID: %d\n", getpid());
         sleep(100);
         printf(1, "Received %d signals.\n", signal_count);
-        exit();
+        exit(0);
     }
     else 
     {
@@ -34,5 +34,5 @@ int main()
         wait(); // Czekaj na zakończenie procesu potomnego
     }
 
-    exit();
+    exit(0);
 }
