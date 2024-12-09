@@ -3,9 +3,9 @@ OBJ_FILES := $(ASM_FILES:.asm=.o)
 BIN_FILES := $(ASM_FILES:.asm=)
 
 NASM := nasm
-NASM_FLAGS := -f elf64
+NASM_FLAGS := -f elf
 LD := ld
-LD_FLAGS := -m elf_x86_64
+LD_FLAGS := -m elf_i386
 
 all: $(BIN_FILES)
 
