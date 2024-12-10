@@ -81,7 +81,7 @@ print_digit_loop:
     test eax, eax         ; Check if quotient is 0
     jnz print_digit_loop
 
-print_digits:
+print_digits:            ;FUCK ME FUCK THIS SHIT FUUUCKS
     push ecx             ; Save loop counter `ecx` on the stack
     pop dx                ; Retrieve digit from stack
     mov [buffer], dl      ; Store digit in buffer
