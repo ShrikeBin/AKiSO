@@ -1,6 +1,7 @@
  %include        '../functions.asm'
 
-SECTION .text
+section .data
+    result_msg_total db "Sum of numbers: ", 0
 global  _start
  
 _start:
@@ -30,6 +31,14 @@ sum:
 
 
 done:
+    push ebx
+    mov eax, 4
+    mov ebx, 1
+    mov ecx, result_msg_total
+    mov edx, 16
+    int 0x80
+    pop ebx
+
     mov eax, ebx            ; sum from ebx goes to eax (because function iprintLF reads from eax and then converts this)
     call iprintLF
     

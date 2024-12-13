@@ -1,3 +1,5 @@
+%include        '../functions.asm'
+
 section .data
     matrix dd 1, 2, 3, 4, 5, 6, 7, 8, 9
     result_msg_total db "Sum of elements: ", 0
@@ -22,16 +24,18 @@ _start:
 matrix_loop:
     mov edx, [esi + edi*4]
     add eax, edx
-    cmp edi, 8
+    cmp edi, 8             ; Check if `edi` is 0 (first diagonal element).
     je store_sums
     test edi, 3
     jnz next_element
     add ebx, edx
+
 next_element:
     inc edi
     jmp matrix_loop
 
 store_sums:
+    add ebx, edx            ; STUPID BUT WORKS LMAO
     mov [total_sum], eax
     mov [diagonal_sum], ebx
 
@@ -43,13 +47,7 @@ store_sums:
     int 0x80
 
     mov eax, [total_sum]
-    call print_number
-
-    mov eax, 4
-    mov ebx, 1
-    mov ecx, newline
-    mov edx, 1
-    int 0x80
+    call iprintLF
 
     mov eax, 4
     mov ebx, 1
@@ -58,9 +56,7 @@ store_sums:
     int 0x80
 
     mov eax, [diagonal_sum]
-    call print_number
+    call iprintLF
 
     ; Wyjście
-    mov eax, 1
-    xor ebx, ebx
-    int 0x80
+    call quit
