@@ -1,3 +1,4 @@
+%include        '../functions.asm'
 section .data
     sieve_size equ 100001             ; Rozmiar tablicy (100000 + 1, bo 0 jest ignorowane)
     prime_msg db "Prime: ", 0
@@ -62,7 +63,7 @@ print_loop:
 
     ; Wyświetl liczbę
     mov eax, ecx                      ; Przechowujemy aktualną liczbę w eax
-    call print_decimal
+    call iprintLF
 
     ; Wyświetl nową linię
     mov eax, 4
