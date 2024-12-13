@@ -1,4 +1,4 @@
- %include        'functions.asm'
+ %include        '../functions.asm'
 
 SECTION .text
 global  _start
