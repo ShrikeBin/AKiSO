@@ -1,7 +1,9 @@
+%include        '../functions.asm'
 section .data
-    number dd 0x12345678
+    number dd 12345678
     msg db "Hexadecimal: ", 0
     newline db 10, 0
+    buffer db 100
 
 section .text
     global _start
@@ -26,32 +28,15 @@ _start:
     int 0x80
 
     ; Wyjście
-    mov eax, 1
-    xor ebx, ebx
-    int 0x80
-
+    call quit
 print_hex:
-    push eax
     mov ecx, 8
-hex_loop:
-    rol eax, 4
-    mov edx, eax
-    and edx, 0xF
-    add dl, '0'
-    cmp dl, '9'
-    jbe write_hex
-    add dl, 7
-write_hex:
-    push dx
-    loop hex_loop
+process_loop:
+    mov edx, eax        ; Copy eax to edx
+    and edx, 0xF         ; Mask only the lowest 4 bits
+    call iprintLF        ; Call the printINT function with this nibble
 
-print_hex_digits:
-    pop dx
-    mov [buffer], dl
-    mov eax, 4
-    mov ebx, 1
-    mov ecx, buffer
-    mov edx, 1
-    int 0x80
-    loop print_hex_digits
-    ret
+    ; Shift eax left by 4 bits to remove the processed nibble
+    shl eax, 4
+
+    loop process_loop     ; Continue looping until all 8 nibbles are processed
