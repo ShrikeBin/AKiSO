@@ -18,7 +18,11 @@ _start:
 
     ; Pobierz liczbę
     mov eax, [number]
+    lea edi, [buffer]
     call print_hex
+
+    lea eax, [buffer]          ; Load buffer address into EAX (expected by your function)
+    call sprint
 
     ; Wyświetl nową linię
     mov eax, 4
@@ -32,11 +36,26 @@ _start:
 print_hex:
     mov ecx, 8
 process_loop:
-    mov edx, eax        ; Copy eax to edx
-    and edx, 0xF         ; Mask only the lowest 4 bits
-    call iprintLF        ; Call the printINT function with this nibble
+    mov edx, eax             ; Copy eax to edx
+    and edx, 0xF0000000      ; Mask to isolate the top nibble (if edx = 12345678 which is 0000 0000 1011 1100 0110 0001 0100 1110, after it will be [0000] 0000 0000 0000 0000 0000 0000 0000 )
+    shr edx, 28              ; Shift it to the top 4 bits
 
-    ; Shift eax left by 4 bits to remove the processed nibble
+    ; Convert to ASCII
+    cmp edx, 10
+    jl convert_to_number
+    add dl, 'A' - 10
+    jmp store_to_buffer
+
+convert_to_number:
+    add dl, '0'
+
+store_to_buffer:
+    mov [edi], dl            ; Store ASCII in buffer
+    inc edi                  ; Increment buffer pointer
+
+    ; Shift EAX left for the next nibble
     shl eax, 4
+    loop process_loop        ; Decrement ECX and repeat if not zero
 
-    loop process_loop     ; Continue looping until all 8 nibbles are processed
+    mov byte [edi], 0        ; Store a null terminator at the end of the buffer
+    ret                      ; Return to caller
