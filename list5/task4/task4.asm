@@ -1,4 +1,4 @@
-%include    './../functions.asm'
+%include    '../functions.asm'
 
 
 section .bss
@@ -10,18 +10,18 @@ section .text
 _start:
     mov ecx, nums
 
-initNums:
+init:
     mov byte [ecx], 1
     inc ecx
     cmp ecx, nums + 100000
-    jl initNums
+    jl init
 
     mov byte [nums], 0
     xor ecx, ecx
 
 sieve:
     inc ecx
-    cmp ecx, 316 ;sqrt(100000)
+    cmp ecx, 316        ; 316^2 > 100 000
     je print
 
     cmp byte [nums + ecx - 1], 0
@@ -30,12 +30,12 @@ sieve:
     mov eax, ecx
     imul eax, eax
 
-setNonPrimes:
+nonPrimes:
     mov byte [nums + eax - 1], 0
 
     add eax, ecx
     cmp eax, 100000
-    jl setNonPrimes
+    jl nonPrimes
 
     jmp sieve
 
