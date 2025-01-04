@@ -108,7 +108,7 @@ index 7134cff..8758964 100644
 +        if (pt[j] & PTE_P) 
 +        {
 +          // Wypisz indeks PTE(Konkretnej Strony) i fizyczny adres zamapowanej strony
-+          cprintf("....PTE id: %d -> pa %p\n", j, PTE_ADDR(pt[j]));
++          cprintf("....PTE id: %d pte %p -> pa %p\n", j, pt[j], PTE_ADDR(pt[j]));
 +        }
 +      }
 +    }
