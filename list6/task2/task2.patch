@@ -1,0 +1,188 @@
+diff --git a/Makefile b/Makefile
+index 09d790c..43ca7d1 100644
+--- a/Makefile
++++ b/Makefile
+@@ -76,7 +76,7 @@ AS = $(TOOLPREFIX)gas
+ LD = $(TOOLPREFIX)ld
+ OBJCOPY = $(TOOLPREFIX)objcopy
+ OBJDUMP = $(TOOLPREFIX)objdump
+-CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
++CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -mno-sse -ggdb -m32 -fno-omit-frame-pointer
+ CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+ ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
+ # FreeBSD ld wants ``elf_i386_fbsd''
+@@ -116,6 +116,7 @@ entryother: entryother.S
+ 
+ initcode: initcode.S
+ 	$(CC) $(CFLAGS) -nostdinc -I. -c initcode.S
++	$(OBJCOPY) --remove-section .note.gnu.property initcode.o
+ 	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o initcode.out initcode.o
+ 	$(OBJCOPY) -S -O binary initcode.out initcode
+ 	$(OBJDUMP) -S initcode.o > initcode.asm
+@@ -146,6 +147,7 @@ vectors.S: vectors.pl
+ ULIB = ulib.o usys.o printf.o umalloc.o
+ 
+ _%: %.o $(ULIB)
++	$(OBJCOPY) --remove-section .note.gnu.property ulib.o
+ 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
+ 	$(OBJDUMP) -S $@ > $*.asm
+ 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
+@@ -181,6 +183,7 @@ UPROGS=\
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_test_mem\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+@@ -250,7 +253,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
+ EXTRA=\
+ 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
+ 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
+-	printf.c umalloc.c\
++	printf.c umalloc.c test_mem.c\
+ 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
+ 	.gdbinit.tmpl gdbutil\
+ 
+diff --git a/proc.c b/proc.c
+index 806b1b1..172a072 100644
+--- a/proc.c
++++ b/proc.c
+@@ -532,3 +532,24 @@ procdump(void)
+     cprintf("\n");
+   }
+ }
++
++// 
++// Count page amount
++// 
++
++int usedvp(void) 
++{
++  struct proc *p = myproc();
++  uint sz = p->sz; // rozmiar programu w pamięci
++  int pages = 0;
++  
++  for (uint addr = 0; addr < sz; addr += PGSIZE) 
++  {
++    pages++;
++  }
++  
++  // "Ochrona stosu"
++  pages++;
++  
++  return pages;
++}
+diff --git a/syscall.c b/syscall.c
+index ee85261..217358d 100644
+--- a/syscall.c
++++ b/syscall.c
+@@ -104,6 +104,9 @@ extern int sys_wait(void);
+ extern int sys_write(void);
+ extern int sys_uptime(void);
+ 
++extern int sys_usedvp(void);
++extern int sys_usedpp(void);
++
+ static int (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+ [SYS_exit]    sys_exit,
+@@ -126,6 +129,8 @@ static int (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_usedvp]    sys_usedvp,
++[SYS_usedpp]    sys_usedpp,
+ };
+ 
+ void
+diff --git a/syscall.h b/syscall.h
+index bc5f356..5a41a9f 100644
+--- a/syscall.h
++++ b/syscall.h
+@@ -20,3 +20,5 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_usedvp   23
++#define SYS_usedpp   24
+diff --git a/sysproc.c b/sysproc.c
+index 0686d29..28ea78b 100644
+--- a/sysproc.c
++++ b/sysproc.c
+@@ -89,3 +89,18 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++
++extern int usedvp(void);
++extern int usedpp(void);
++
++int 
++sys_usedvp(void) 
++{
++  return usedvp();
++}
++
++int 
++sys_usedpp(void) 
++{
++  return usedpp();
++}
+diff --git a/user.h b/user.h
+index 4f99c52..150ba9c 100644
+--- a/user.h
++++ b/user.h
+@@ -23,6 +23,9 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int usedvp(void);
++int usedpp(void);
++
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+@@ -37,3 +40,4 @@ void* memset(void*, int, uint);
+ void* malloc(uint);
+ void free(void*);
+ int atoi(const char*);
++
+diff --git a/usys.S b/usys.S
+index 8bfd8a1..4b8bb3e 100644
+--- a/usys.S
++++ b/usys.S
+@@ -29,3 +29,5 @@ SYSCALL(getpid)
+ SYSCALL(sbrk)
+ SYSCALL(sleep)
+ SYSCALL(uptime)
++SYSCALL(usedvp)
++SYSCALL(usedpp)
+diff --git a/vm.c b/vm.c
+index 7134cff..6569091 100644
+--- a/vm.c
++++ b/vm.c
+@@ -392,3 +392,23 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
+ //PAGEBREAK!
+ // Blank page.
+ 
++int usedpp(void) 
++{
++  struct proc *p = myproc();
++  pte_t *pte;
++  uint va; // virtual adress
++  int pages = 0;
++    
++  // for przez tabele stron procesu, po jednej stronie od adresu
++  for (va = 0; va < p->sz; va += PGSIZE) 
++  {
++    pte = walkpgdir(p->pgdir, (void*)va, 0); //void bo chce ogólny wskaźnik, pte -> page table entry
++
++    if (pte != 0 && (*pte & PTE_P))  // && sprawdza czy jest przypisana do jakiejś fizycznej pamięci
++    {
++      pages++;
++    }
++  }
++    
++  return pages;
++}

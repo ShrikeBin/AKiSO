@@ -1,0 +1,116 @@
+diff --git a/Makefile b/Makefile
+index 09d790c..eb79fdf 100644
+--- a/Makefile
++++ b/Makefile
+@@ -76,7 +76,7 @@ AS = $(TOOLPREFIX)gas
+ LD = $(TOOLPREFIX)ld
+ OBJCOPY = $(TOOLPREFIX)objcopy
+ OBJDUMP = $(TOOLPREFIX)objdump
+-CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
++CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -mno-sse -ggdb -m32 -fno-omit-frame-pointer
+ CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+ ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
+ # FreeBSD ld wants ``elf_i386_fbsd''
+@@ -116,6 +116,7 @@ entryother: entryother.S
+ 
+ initcode: initcode.S
+ 	$(CC) $(CFLAGS) -nostdinc -I. -c initcode.S
++	$(OBJCOPY) --remove-section .note.gnu.property initcode.o
+ 	$(LD) $(LDFLAGS) -N -e start -Ttext 0 -o initcode.out initcode.o
+ 	$(OBJCOPY) -S -O binary initcode.out initcode
+ 	$(OBJDUMP) -S initcode.o > initcode.asm
+@@ -146,6 +147,7 @@ vectors.S: vectors.pl
+ ULIB = ulib.o usys.o printf.o umalloc.o
+ 
+ _%: %.o $(ULIB)
++	$(OBJCOPY) --remove-section .note.gnu.property ulib.o
+ 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^
+ 	$(OBJDUMP) -S $@ > $*.asm
+ 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
+@@ -181,6 +183,7 @@ UPROGS=\
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_testvm\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+@@ -250,7 +253,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
+ EXTRA=\
+ 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
+ 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
+-	printf.c umalloc.c\
++	printf.c umalloc.c testvm.c\
+ 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
+ 	.gdbinit.tmpl gdbutil\
+ 
+diff --git a/exec.c b/exec.c
+index b40134f..be5d5ac 100644
+--- a/exec.c
++++ b/exec.c
+@@ -99,6 +99,10 @@ exec(char *path, char **argv)
+   curproc->sz = sz;
+   curproc->tf->eip = elf.entry;  // main
+   curproc->tf->esp = sp;
++  
++  cprintf("Page table EXEC for [%s]:\n", curproc->name);
++  vmprint(curproc->pgdir);
++
+   switchuvm(curproc);
+   freevm(oldpgdir);
+   return 0;
+diff --git a/proc.c b/proc.c
+index 806b1b1..60c6d0c 100644
+--- a/proc.c
++++ b/proc.c
+@@ -261,6 +261,9 @@ exit(void)
+     }
+   }
+ 
++  cprintf("Page table EXIT for [%s]:\n", curproc->name);
++  vmprint(curproc->pgdir);
++
+   // Jump into the scheduler, never to return.
+   curproc->state = ZOMBIE;
+   sched();
+diff --git a/vm.c b/vm.c
+index 7134cff..8758964 100644
+--- a/vm.c
++++ b/vm.c
+@@ -392,3 +392,36 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
+ //PAGEBREAK!
+ // Blank page.
+ 
++void vmprint(pde_t *pgdir) 
++{
++  if (!pgdir) 
++  {
++    cprintf("vmprint: pgdir is NULL\n");
++    return;
++  }
++
++  // Iteracja przez katalog stron (do 512, kernel jest mapowany dalej)
++  for (int i = 0; i < 512; i++) 
++  {
++    if (pgdir[i] & PTE_P) 
++    {
++      // Wypisz indeks PDE(Katalogu Stron) i fizyczny adres tablicy stron
++      // pa = physical address
++
++      cprintf("..PDE id: %d -> pa %p\n", i, PTE_ADDR(pgdir[i]));
++
++      // Pobierz adres tablicy stron (konwersja na adres wirtualny)
++      pte_t *pt = (pte_t *) P2V(PTE_ADDR(pgdir[i]));
++
++      // Iteracja przez wpisy tablicy stron (1024 wpisy)
++      for (int j = 0; j < 1024; j++) 
++      {
++        if (pt[j] & PTE_P) 
++        {
++          // Wypisz indeks PTE(Konkretnej Strony) i fizyczny adres zamapowanej strony
++          cprintf("....PTE id: %d -> pa %p\n", j, PTE_ADDR(pt[j]));
++        }
++      }
++    }
++  }
++}
