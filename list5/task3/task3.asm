@@ -1,6 +1,6 @@
 %include        '../functions.asm'
 section .data
-    number dd 12345678
+    number dd 3735928559
     msg db "Hexadecimal: ", 0
     newline db 10, 0
     buffer db 100
@@ -21,7 +21,7 @@ _start:
     lea edi, [buffer]
     call print_hex
 
-    lea eax, [buffer]          ; Load buffer address into EAX (expected by your function)
+    lea eax, [buffer]          ; Load buffer address into EAX (expected by function)
     call sprint
 
     ; Wyświetl nową linię
