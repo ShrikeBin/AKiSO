@@ -44,6 +44,18 @@ index 09d790c..eb79fdf 100644
  	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
  	.gdbinit.tmpl gdbutil\
  
+diff --git a/defs.h b/defs.h
+index 82fb982..9d0ac96 100644
+--- a/defs.h
++++ b/defs.h
+@@ -185,6 +185,7 @@ void            switchuvm(struct proc*);
+ void            switchkvm(void);
+ int             copyout(pde_t*, uint, void*, uint);
+ void            clearpteu(pde_t *pgdir, char *uva);
++void            vmprint(pde_t *pgdir);
+ 
+ // number of elements in fixed-size array
+ #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 diff --git a/exec.c b/exec.c
 index b40134f..be5d5ac 100644
 --- a/exec.c
@@ -74,7 +86,7 @@ index 806b1b1..60c6d0c 100644
    curproc->state = ZOMBIE;
    sched();
 diff --git a/vm.c b/vm.c
-index 7134cff..8758964 100644
+index 7134cff..ae59d17 100644
 --- a/vm.c
 +++ b/vm.c
 @@ -392,3 +392,36 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
